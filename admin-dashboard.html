@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Admin Dashboard — Classroom Equipment Borrowing System." />
+  <title>Admin Dashboard — CEBS</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="admin.css" />
+</head>
+<body>
+
+<div class="dash-page">
+
+  <!-- ── Navigation Bar ──────────────────────────────────────── -->
+  <nav class="dash-navbar" aria-label="Admin navigation">
+    <a href="#" class="dash-navbar-brand">
+      <div class="dash-navbar-brand-icon">🎒</div>
+      CEBS
+    </a>
+    <div class="dash-navbar-right">
+      <div class="dash-user-pill">
+        <div class="dash-avatar" id="admin-avatar">A</div>
+        <span id="admin-fullname">Loading…</span>
+        <span class="role-badge admin">Admin</span>
+      </div>
+      <button id="btn-refresh-stats" class="btn-icon-sm" title="Refresh stats" aria-label="Refresh dashboard stats">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+      </button>
+      <button id="btn-logout-admin" class="btn-logout" aria-label="Sign out">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        Sign Out
+      </button>
+    </div>
+  </nav>
+
+  <!-- ── Hero ─────────────────────────────────────────────────── -->
+  <header class="dash-hero">
+    <h1>⚙️ Admin Dashboard</h1>
+    <p>Manage users, equipment inventory, borrowing requests, and generate reports.</p>
+  </header>
+
+  <!-- ── Dashboard Body ────────────────────────────────────────── -->
+  <main class="dash-body">
+
+    <!-- KPI Cards (populated by admin.js → loadDashboardStats via RPC) -->
+    <div class="kpi-grid" id="admin-kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-icon">👥</div>
+        <div class="kpi-value" id="kpi-total-users">—</div>
+        <div class="kpi-label">Total Users</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-icon">📦</div>
+        <div class="kpi-value" id="kpi-total-equipment">—</div>
+        <div class="kpi-label">Equipment Items</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-icon">📋</div>
+        <div class="kpi-value" id="kpi-active-borrows">—</div>
+        <div class="kpi-label">Active Borrows</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-icon">⚠️</div>
+        <div class="kpi-value" id="kpi-overdue">—</div>
+        <div class="kpi-label">Overdue</div>
+      </div>
+    </div>
+
+    <!-- ── Tab Navigation ──────────────────────────────────────── -->
+    <div class="admin-tabs" role="tablist" aria-label="Admin panel sections">
+      <button class="tab-btn active" data-tab="tab-equipment" role="tab" aria-controls="tab-equipment">
+        📦 Equipment
+      </button>
+      <button class="tab-btn" data-tab="tab-users" role="tab" aria-controls="tab-users">
+        👥 Users
+      </button>
+      <button class="tab-btn" data-tab="tab-overdue" role="tab" aria-controls="tab-overdue">
+        ⚠️ Overdue
+      </button>
+      <button class="tab-btn" data-tab="tab-report" role="tab" aria-controls="tab-report">
+        📊 Monthly Report
+      </button>
+      <button class="tab-btn" data-tab="tab-logs" role="tab" aria-controls="tab-logs">
+        🗒️ System Logs
+      </button>
+    </div>
+
+    <!-- ════════════════════════════════════════════════════════
+         TAB: Equipment
+         ════════════════════════════════════════════════════════ -->
+    <section id="tab-equipment" class="tab-panel tab-active" role="tabpanel">
+
+      <!-- Toolbar -->
+      <div class="panel-toolbar">
+        <div class="search-group">
+          <svg class="search-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input type="text" id="search-equipment" class="search-input"
+                 placeholder="Search by name or serial no…" aria-label="Search equipment" />
+        </div>
+        <select id="filter-status" class="filter-select" aria-label="Filter by status">
+          <option value="">All Statuses</option>
+          <option value="Available">Available</option>
+          <option value="Borrowed">Borrowed</option>
+          <option value="Maintenance">Maintenance</option>
+        </select>
+        <select id="filter-category" class="filter-select category-select" aria-label="Filter by category"></select>
+        <button id="btn-add-equipment" class="btn-primary" type="button">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Add Equipment
+        </button>
+      </div>
+
+      <!-- Equipment Table -->
+      <div class="table-wrapper">
+        <table class="data-table" aria-label="Equipment inventory">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Serial No.</th>
+              <th>Category</th>
+              <th>Status</th>
+              <th>Notes</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="equipment-table-body">
+            <tr><td colspan="6" class="table-loading">Loading equipment…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ════════════════════════════════════════════════════════
+         TAB: Users
+         ════════════════════════════════════════════════════════ -->
+    <section id="tab-users" class="tab-panel" role="tabpanel">
+      <div class="panel-toolbar">
+        <h3 class="panel-title">User Management</h3>
+        <span class="panel-hint">Change a role inline using the dropdown. Changes save automatically.</span>
+      </div>
+      <div class="table-wrapper">
+        <table class="data-table" aria-label="User management">
+          <thead>
+            <tr>
+              <th>Username</th>
+              <th>Full Name</th>
+              <th>Role</th>
+              <th>Joined</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="users-table-body">
+            <tr><td colspan="5" class="table-loading">Loading users…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ════════════════════════════════════════════════════════
+         TAB: Overdue Borrowers (Subquery RPC)
+         ════════════════════════════════════════════════════════ -->
+    <section id="tab-overdue" class="tab-panel" role="tabpanel">
+      <div class="panel-toolbar">
+        <h3 class="panel-title">Overdue Borrowers</h3>
+        <span class="panel-hint">
+          Users with at least one item past its due date and not yet returned.
+          Powered by a <strong>Subquery</strong> via <code>get_overdue_borrowers()</code>.
+        </span>
+      </div>
+      <div class="table-wrapper">
+        <table class="data-table" aria-label="Overdue borrowers">
+          <thead>
+            <tr>
+              <th>Full Name</th>
+              <th>Username</th>
+              <th>Role</th>
+              <th>Overdue Items</th>
+              <th>Oldest Due Date</th>
+            </tr>
+          </thead>
+          <tbody id="overdue-table-body">
+            <tr><td colspan="5" class="table-loading">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ════════════════════════════════════════════════════════
+         TAB: Monthly Report (CTE RPC)
+         ════════════════════════════════════════════════════════ -->
+    <section id="tab-report" class="tab-panel" role="tabpanel">
+      <div class="panel-toolbar">
+        <h3 class="panel-title">
+          Monthly Report — <span id="report-month-label"></span>
+        </h3>
+        <span class="panel-hint">
+          Borrows per category this month. Generated using a
+          <strong>Common Table Expression (CTE)</strong> via <code>get_monthly_report()</code>.
+        </span>
+      </div>
+      <div class="table-wrapper">
+        <table class="data-table" aria-label="Monthly borrow report">
+          <thead>
+            <tr>
+              <th>Category</th>
+              <th>Total Borrows</th>
+              <th>Still Active</th>
+              <th>Returned</th>
+            </tr>
+          </thead>
+          <tbody id="report-table-body">
+            <tr><td colspan="4" class="table-loading">Generating report…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ════════════════════════════════════════════════════════
+         TAB: System Logs
+         ════════════════════════════════════════════════════════ -->
+    <section id="tab-logs" class="tab-panel" role="tabpanel">
+      <div class="panel-toolbar">
+        <h3 class="panel-title">System Audit Logs</h3>
+        <span class="panel-hint">Last 50 admin actions recorded in <code>system_logs</code>.</span>
+      </div>
+      <div class="table-wrapper">
+        <table class="data-table" aria-label="System audit logs">
+          <thead>
+            <tr>
+              <th>Timestamp</th>
+              <th>Action</th>
+              <th>Performed By</th>
+              <th>Details</th>
+            </tr>
+          </thead>
+          <tbody id="logs-table-body">
+            <tr><td colspan="4" class="table-loading">Loading logs…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+  </main><!-- /dash-body -->
+</div><!-- /dash-page -->
+
+<!-- ════════════════════════════════════════════════════════════
+     MODAL: Add / Edit Equipment
+     ════════════════════════════════════════════════════════════ -->
+<div id="modal-equipment" class="modal-backdrop" role="dialog"
+     aria-modal="true" aria-labelledby="eq-modal-title" aria-hidden="true">
+  <div class="modal-card">
+    <header class="modal-header">
+      <h2 id="eq-modal-title">Add Equipment</h2>
+      <button class="modal-close" aria-label="Close modal">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </header>
+
+    <form id="form-equipment" novalidate>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label" for="eq-name">Equipment Name *</label>
+          <input type="text" id="eq-name" class="form-input" placeholder="e.g. Sony Projector XGA" required />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="eq-serial">Serial Number</label>
+          <input type="text" id="eq-serial" class="form-input" placeholder="e.g. SN-00123" />
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label" for="eq-category">Category</label>
+          <select id="eq-category" class="form-input category-select"></select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="eq-status">Status</label>
+          <select id="eq-status" class="form-input">
+            <option value="Available">Available</option>
+            <option value="Borrowed">Borrowed</option>
+            <option value="Maintenance">Maintenance</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="eq-notes">Notes</label>
+        <textarea id="eq-notes" class="form-input" rows="2" placeholder="Optional remarks…"></textarea>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn-secondary modal-close">Cancel</button>
+        <button type="submit" class="btn-primary">Save Equipment</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div id="toast-container" aria-live="polite" aria-atomic="true"></div>
+
+<script src="supabase.js"></script>
+<script src="dashboard.js"></script>
+<script src="admin.js"></script>
+</body>
+</html>
