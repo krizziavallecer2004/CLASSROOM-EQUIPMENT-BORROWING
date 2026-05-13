@@ -237,7 +237,7 @@
   letter-spacing: .06em;
 }
 .status-available   { background: rgba(63,185,80,.15);  color: #56d364; }
-.status-borrowed    { background: rgba(76,145,245,.15); color: #79b8ff; }
+.status-borrowed    { background: rgba(194,176,131,.15); color: #d4c49c; }
 .status-maintenance { background: rgba(210,153,34,.15); color: #f2cc60; }
 .status-archived    { background: rgba(110,118,129,.15);color: #8b949e; }
 
@@ -256,11 +256,11 @@
   margin-right: .3rem;
 }
 .btn-edit {
-  background: rgba(76,145,245,.12);
-  border-color: rgba(76,145,245,.25);
-  color: #79b8ff;
+  background: rgba(194,176,131,.12);
+  border-color: rgba(194,176,131,.25);
+  color: #d4c49c;
 }
-.btn-edit:hover { background: rgba(76,145,245,.25); }
+.btn-edit:hover { background: rgba(194,176,131,.25); }
 
 .btn-archive {
   background: rgba(210,153,34,.1);
@@ -359,3 +359,65 @@
   padding-top: 1rem;
   border-top: 1px solid var(--clr-border);
 }
+
+/* ── Borrow Requests Tab Styles ────────────────────────────── */
+
+/* Pending count badge on the tab button */
+.tab-pending-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 99px;
+  background: var(--clr-warning);
+  color: #000;
+  font-size: .65rem;
+  font-weight: 800;
+  margin-left: .35rem;
+  vertical-align: middle;
+  animation: badgePulse 2s ease-in-out infinite;
+}
+
+@keyframes badgePulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(210,153,34,.6); }
+  50%       { box-shadow: 0 0 0 5px rgba(210,153,34,0); }
+}
+
+/* Approve button */
+.btn-approve {
+  background: rgba(63,185,80,.12);
+  border-color: rgba(63,185,80,.3);
+  color: #56d364;
+}
+.btn-approve:hover { background: rgba(63,185,80,.25); }
+
+/* Reject button */
+.btn-reject {
+  background: rgba(248,81,73,.1);
+  border-color: rgba(248,81,73,.25);
+  color: #ff7b72;
+}
+.btn-reject:hover { background: rgba(248,81,73,.22); }
+
+/* Mark Returned button */
+.btn-return {
+  background: rgba(194,176,131,.1);
+  border-color: rgba(194,176,131,.25);
+  color: #d4c49c;
+}
+.btn-return:hover { background: rgba(194,176,131,.22); }
+
+/* Pending status badge */
+.status-pending  { background: rgba(210,153,34,.15); color: #f2cc60; }
+.status-returned { background: rgba(110,118,129,.15); color: #8b949e; }
+
+/* Wrap action buttons in requests table without nowrap */
+.req-actions {
+  white-space: nowrap;
+  min-width: 160px;
+}
+
+/* Muted placeholder text */
+.text-muted { color: var(--clr-text-dim); }

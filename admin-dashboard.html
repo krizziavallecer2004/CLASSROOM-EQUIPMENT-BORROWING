@@ -76,6 +76,10 @@
       <button class="tab-btn active" data-tab="tab-equipment" role="tab" aria-controls="tab-equipment">
         📦 Equipment
       </button>
+      <button class="tab-btn tab-btn--requests" data-tab="tab-requests" role="tab" aria-controls="tab-requests">
+        📥 Borrow Requests
+        <span class="tab-pending-badge" id="pending-badge" hidden>0</span>
+      </button>
       <button class="tab-btn" data-tab="tab-users" role="tab" aria-controls="tab-users">
         👥 Users
       </button>
@@ -130,6 +134,49 @@
           </thead>
           <tbody id="equipment-table-body">
             <tr><td colspan="6" class="table-loading">Loading equipment…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ════════════════════════════════════════════════════════
+         TAB: Borrow Requests
+         ════════════════════════════════════════════════════════ -->
+    <section id="tab-requests" class="tab-panel" role="tabpanel">
+      <div class="panel-toolbar">
+        <div>
+          <h3 class="panel-title">Borrow Requests</h3>
+          <span class="panel-hint">Review student requests and approve or reject them.</span>
+        </div>
+        <div style="display:flex;gap:.6rem;align-items:center;">
+          <select id="requests-filter" class="filter-select" aria-label="Filter requests by status">
+            <option value="">All Requests</option>
+            <option value="pending">Pending Only</option>
+            <option value="approved">Approved</option>
+            <option value="rejected">Rejected</option>
+            <option value="returned">Returned</option>
+          </select>
+          <button id="btn-refresh-requests" class="btn-icon-sm" title="Refresh requests" aria-label="Refresh">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="table-wrapper">
+        <table class="data-table" aria-label="Borrow requests">
+          <thead>
+            <tr>
+              <th>Student</th>
+              <th>Equipment</th>
+              <th>Category</th>
+              <th>Borrow Date</th>
+              <th>Due Date</th>
+              <th>Notes</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="requests-table-body">
+            <tr><td colspan="8" class="table-loading">Loading requests…</td></tr>
           </tbody>
         </table>
       </div>
@@ -300,8 +347,8 @@
 
 <div id="toast-container" aria-live="polite" aria-atomic="true"></div>
 
-<script src="supabase.js"></script>
-<script src="dashboard.js"></script>
-<script src="admin.js"></script>
+<script src="supabase.js?v=6"></script>
+<script src="dashboard.js?v=6"></script>
+<script src="admin.js?v=6"></script>
 </body>
 </html>

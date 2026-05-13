@@ -40,6 +40,9 @@ async function loadDashboardStats() {
       document.getElementById('kpi-overdue')?.closest('.kpi-card')
         ?.classList.add('kpi-card--warning');
     }
+
+    // Also refresh the pending-requests badge
+    await refreshPendingBadge();
   } catch (err) {
     console.error('[Admin] loadDashboardStats error:', err.message);
     showToast('Could not load dashboard stats.', 'error');
@@ -276,7 +279,7 @@ async function updateEquipment(id, formData) {
  */
 async function archiveEquipment(id) {
   const item = equipmentData.find(e => e.id === id);
-  if (!confirm(`Archive "${item?.name}"? It will be hidden from the inventory.`)) return;
+  // if (!confirm(`Archive "${item?.name}"? It will be hidden from the inventory.`)) return;
 
   try {
     const { error } = await supabaseClient
@@ -392,7 +395,7 @@ async function updateUserRole(userId, newRole) {
  * @param {string} username - Display name for the confirm dialog.
  */
 async function deleteUser(userId, username) {
-  if (!confirm(`Remove user "${username}"? This cannot be undone.`)) return;
+  // if (!confirm(`Remove user "${username}"? This cannot be undone.`)) return;
 
   try {
     const { error } = await supabaseClient
@@ -578,6 +581,276 @@ async function loadSystemLogs() {
 
 
 /* ============================================================
+   SECTION H — BORROW REQUESTS MANAGEMENT
+   Admin can Approve, Reject, or Mark as Returned.
+   ============================================================ */
+
+/** All loaded request rows (for in-memory filter) */
+let requestsData = [];
+
+/**
+ * Derives a display status label from a transaction row.
+ * Uses `req_status` custom field if present (from notes hack),
+ * otherwise falls back to return_date / due_date.
+ */
+function deriveReqStatus(txn) {
+  // We store the workflow status in a prefixed notes field.
+  // Format: "[STATUS:Pending]" or "[STATUS:Approved]" etc.
+  const match = (txn.notes || '').match(/^\[STATUS:(\w+)\]/);
+  if (match) return match[1];          // Pending | Approved | Rejected | Returned
+  if (txn.return_date) return 'Returned';
+  // Any untagged, unreturned row is implicitly Pending — admin must act on it.
+  return 'Pending';
+}
+
+/**
+ * Refreshes the orange pending-count badge on the Borrow Requests tab.
+ */
+async function refreshPendingBadge() {
+  try {
+    // Fetch all unreturned transactions, then count those that are Pending.
+    // This covers both tagged [STATUS:Pending] rows AND legacy untagged rows.
+    const { data, error } = await supabaseClient
+      .from('transactions')
+      .select('id, notes, return_date')
+      .is('return_date', null);
+
+    const badge = document.getElementById('pending-badge');
+    if (!badge) return;
+
+    const n = error ? 0 : (data || []).filter(t => deriveReqStatus(t) === 'Pending').length;
+    badge.textContent = n;
+    if (n > 0) {
+      badge.removeAttribute('hidden');
+    } else {
+      badge.setAttribute('hidden', '');
+    }
+  } catch (_) { /* non-critical */ }
+}
+
+/**
+ * Loads all borrow transactions joined with student name + equipment details.
+ * Applies an optional status filter from the #requests-filter dropdown.
+ */
+async function loadBorrowRequests() {
+  const tbody = document.getElementById('requests-table-body');
+  if (!tbody) return;
+
+  tbody.innerHTML = `<tr><td colspan="8" class="table-loading">Loading requests…</td></tr>`;
+
+  try {
+    const { data, error } = await supabaseClient
+      .from('transactions')
+      .select(`
+        id, borrow_date, due_date, return_date, notes, created_at,
+        student:user_id ( id, full_name, username ),
+        equipment:equipment_id (
+          id, name, serial_number,
+          categories ( category_name )
+        )
+      `)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+
+    requestsData = data || [];
+    applyRequestsFilter();
+    await refreshPendingBadge();
+
+  } catch (err) {
+    console.error('[Admin] loadBorrowRequests error:', err.message);
+    tbody.innerHTML = `<tr><td colspan="8" class="table-error table-empty">Failed to load requests.</td></tr>`;
+    showToast('Could not load borrow requests.', 'error');
+  }
+}
+
+/**
+ * Filters `requestsData` by the selected status and re-renders the table.
+ */
+function applyRequestsFilter() {
+  const filter = document.getElementById('requests-filter')?.value || '';
+
+  const filtered = requestsData.filter(txn => {
+    if (!filter) return true;
+    const status = deriveReqStatus(txn).toLowerCase();
+    return status === filter;
+  });
+
+  renderRequestsTable(filtered);
+}
+
+const REQ_STATUS_BADGE = {
+  'Pending':  'status-badge status-pending',
+  'Approved': 'status-badge status-available',
+  'Rejected': 'status-badge status-maintenance',
+  'Returned': 'status-badge status-returned',
+  'Active':   'status-badge status-borrowed',
+};
+
+/**
+ * Renders the borrow requests table.
+ * @param {Array} rows
+ */
+function renderRequestsTable(rows) {
+  const tbody = document.getElementById('requests-table-body');
+  if (!tbody) return;
+
+  if (!rows.length) {
+    tbody.innerHTML = `<tr><td colspan="8" class="table-empty">No requests found.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = rows.map(txn => {
+    const status    = deriveReqStatus(txn);
+    const badgeCls  = REQ_STATUS_BADGE[status] || 'status-badge status-borrowed';
+    const student   = txn.student?.full_name   || txn.student?.username || '—';
+    const eqName    = txn.equipment?.name       || '(Deleted)';
+    const catName   = txn.equipment?.categories?.category_name || '—';
+    const noteClean = (txn.notes || '').replace(/^\[STATUS:\w+\]\s*/, '').trim() || '—';
+
+    // Build action buttons based on current status
+    let actions = '';
+    if (status === 'Pending') {
+      actions = `
+        <button class="btn-table btn-approve"
+                onclick="handleRequest('${txn.id}', '${txn.equipment?.id}', 'Approved')">
+          ✓ Approve
+        </button>
+        <button class="btn-table btn-reject"
+                onclick="handleRequest('${txn.id}', '${txn.equipment?.id}', 'Rejected')">
+          ✗ Reject
+        </button>`;
+    } else if (status === 'Approved') {
+      actions = `
+        <button class="btn-table btn-return"
+                onclick="markReturned('${txn.id}', '${txn.equipment?.id}')">
+          ↩ Mark Returned
+        </button>`;
+    } else {
+      actions = `<span class="text-muted">—</span>`;
+    }
+
+    const overdueClass = !txn.return_date && new Date(txn.due_date + 'T23:59:59') < new Date()
+      ? 'style="color:#ff7b72;font-weight:600;"' : '';
+
+    return `
+      <tr>
+        <td>${escHtml(student)}</td>
+        <td><strong>${escHtml(eqName)}</strong></td>
+        <td>${escHtml(catName)}</td>
+        <td>${txn.borrow_date || '—'}</td>
+        <td ${overdueClass}>${txn.due_date || '—'}</td>
+        <td class="log-details">${escHtml(noteClean)}</td>
+        <td><span class="${badgeCls}">${status}</span></td>
+        <td class="table-actions req-actions">${actions}</td>
+      </tr>`;
+  }).join('');
+}
+
+/**
+ * Approves or Rejects a borrow request.
+ * - Approve: tags notes with [STATUS:Approved], sets equipment → Borrowed.
+ * - Reject:  tags notes with [STATUS:Rejected], equipment stays Available.
+ * @param {string} txnId       - Transaction UUID
+ * @param {string} equipmentId - Equipment UUID
+ * @param {'Approved'|'Rejected'} action
+ */
+async function handleRequest(txnId, equipmentId, action) {
+  const label = action === 'Approved' ? 'approve' : 'reject';
+  // if (!confirm(`Are you sure you want to ${label} this request?`)) return;
+
+  try {
+    // Find the current transaction to preserve any user notes
+    const txn = requestsData.find(r => r.id === txnId);
+    const rawNote = (txn?.notes || '').replace(/^\[STATUS:\w+\]\s*/, '').trim();
+    const newNotes = `[STATUS:${action}] ${rawNote}`.trim();
+
+    // 1. Update the transaction notes to embed the new status
+    const { error: txnErr } = await supabaseClient
+      .from('transactions')
+      .update({ notes: newNotes })
+      .eq('id', txnId);
+    if (txnErr) throw txnErr;
+
+    // 2. Update equipment status
+    if (action === 'Approved' && equipmentId) {
+      const { error: eqErr } = await supabaseClient
+        .from('equipment')
+        .update({ status: 'Borrowed' })
+        .eq('id', equipmentId);
+      if (eqErr) throw eqErr;
+    }
+
+    // 3. Log the action
+    await supabaseClient.rpc('log_action', {
+      p_action_type: `REQUEST_${action.toUpperCase()}`,
+      p_details: { transaction_id: txnId, equipment_id: equipmentId },
+    });
+
+    showToast(
+      action === 'Approved'
+        ? 'Request approved — equipment marked as Borrowed.'
+        : 'Request rejected.',
+      action === 'Approved' ? 'success' : 'info'
+    );
+
+    // Refresh both panels
+    await Promise.all([loadBorrowRequests(), loadEquipment(), loadDashboardStats()]);
+
+  } catch (err) {
+    console.error(`[Admin] handleRequest(${action}) error:`, err.message);
+    showToast(`Action failed: ${err.message}`, 'error');
+  }
+}
+
+/**
+ * Marks a borrowed item as returned.
+ * Sets return_date = today, updates notes status tag, equipment → Available.
+ * @param {string} txnId       - Transaction UUID
+ * @param {string} equipmentId - Equipment UUID
+ */
+async function markReturned(txnId, equipmentId) {
+  // if (!confirm('Mark this item as returned?')) return;
+
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    const txn   = requestsData.find(r => r.id === txnId);
+    const rawNote = (txn?.notes || '').replace(/^\[STATUS:\w+\]\s*/, '').trim();
+    const newNotes = `[STATUS:Returned] ${rawNote}`.trim();
+
+    // 1. Record the return date and update status tag
+    const { error: txnErr } = await supabaseClient
+      .from('transactions')
+      .update({ return_date: today, notes: newNotes })
+      .eq('id', txnId);
+    if (txnErr) throw txnErr;
+
+    // 2. Free up the equipment
+    if (equipmentId) {
+      const { error: eqErr } = await supabaseClient
+        .from('equipment')
+        .update({ status: 'Available' })
+        .eq('id', equipmentId);
+      if (eqErr) throw eqErr;
+    }
+
+    // 3. Log the return
+    await supabaseClient.rpc('log_action', {
+      p_action_type: 'ITEM_RETURNED',
+      p_details: { transaction_id: txnId, equipment_id: equipmentId, return_date: today },
+    });
+
+    showToast('Item marked as returned. Equipment is now available.', 'success');
+    await Promise.all([loadBorrowRequests(), loadEquipment(), loadDashboardStats()]);
+
+  } catch (err) {
+    console.error('[Admin] markReturned error:', err.message);
+    showToast(`Failed to record return: ${err.message}`, 'error');
+  }
+}
+
+
+/* ============================================================
    MODAL HELPERS
    ============================================================ */
 
@@ -634,6 +907,7 @@ function switchTab(tabId) {
 
   // Lazy-load data when switching tabs
   if (tabId === 'tab-equipment')  loadEquipment();
+  if (tabId === 'tab-requests')   loadBorrowRequests();
   if (tabId === 'tab-users')      loadUsers();
   if (tabId === 'tab-overdue')    loadOverdueBorrowers();
   if (tabId === 'tab-report')     loadMonthlyReport();
@@ -733,6 +1007,12 @@ async function initAdminDashboard() {
     await loadDashboardStats();
     showToast('Stats refreshed.', 'info', 2000);
   });
+
+  // Borrow Requests — filter and refresh
+  document.getElementById('requests-filter')
+    ?.addEventListener('change', applyRequestsFilter);
+  document.getElementById('btn-refresh-requests')
+    ?.addEventListener('click', loadBorrowRequests);
 
   // Default: show equipment tab
   switchTab('tab-equipment');
